@@ -1,111 +1,79 @@
-# 과제 2 신청 승인 서비스 시작 코드
+# 웹서비스 설계 과제 2 CAMPUS 신청 승인 서비스 
 
-신청·대기 취소·직접 승인·승인 취소·대기열 자동 승급·변경 이력을 구현합니다. 상위 폴더의 [안내문](../01_과제2_안내문.pdf)과 [API 계약](docs/API.md)을 먼저 읽으세요.
+행사 신청, 학생의 대기 취소, 담당 운영자의 직접 승인, 승인 취소와 대기자 자동 승급을 구현하였습니다. 성공한 상태 변경은 행위자와 변경 전후 상태를 포함하여 이력으로 남깁니다. 서버는 Node.js와 Express로 실행하고, SQLite에 데이터와 이력을 저장하며 JWT로 사용자를 인증합니다.
 
-**제출 마감: 2026년 11월 25일 23:59 (한국 시간)**
+## 설치와 실행
 
-## 실행
-
-Node.js **24.x**와 npm이 필요합니다. Node.js 20은 지원하지 않습니다. SQLite는 Node 내장 모듈입니다.
+Node.js 24.x, npm을 사용합니다. 검증에는 Node.js v24.22.3을 사용하였습니다.
 
 ```sh
+git clone https://github.com/kwonjunsun9/26WSD-assignment-02.git
+cd 26WSD-assignment-02
 node --version
 npm ci
-npm test
 npm start
 ```
 
-http://127.0.0.1:3000 에 접속합니다. Ctrl+C로 종료합니다.
+브라우저에서 [http://127.0.0.1:3000](http://127.0.0.1:3000)에 접속합니다. 첫 실행 시 `data/app.sqlite`와 `data/jwt-secret.txt`가 로컬에 생성됩니다. 의존성 설치에는 [package-lock.json](package-lock.json)을 사용합니다.
 
-- 포트 사용 중: 기존 실행 터미널을 종료하거나 다른 포트를 사용합니다.
-- macOS / Linux: `PORT=3001 npm start`
-- Windows PowerShell: `$env:PORT="3001"; npm start`
-- 첫 실행: `data/app.sqlite`와 `data/jwt-secret.txt`가 자동 생성됩니다.
-- 브라우저 로그인 토큰은 메모리에만 저장합니다. 새로고침 후 다시 로그인하세요. DB 데이터는 유지됩니다.
+| 연습 계정 | 역할 |
+| --- | --- |
+| `alice`(민지), `bob`(준호), `charlie`(서연) | 학생 |
+| `manager1`(운영자 A) | 행사 1 담당, 정원 2명 |
+| `manager2`(운영자 B) | 행사 2 담당, 정원 1명 |
 
-## 연습 계정
+로그인 화면에서 연습 계정 버튼을 누르면 로그인 정보가 채워집니다. 이어서 로그인 버튼을 누릅니다.
 
-공통 비밀번호는 `Classroom123!`입니다. 실제 이용자가 아닌 가상 계정입니다.
+### DB 초기화
 
-|아이디|이름|역할|
-|---|---|---|
-|alice|민지|학생|
-|bob|준호|학생|
-|charlie|서연|학생|
-|manager1|운영자 A|행사 1 담당 · 정원 2명|
-|manager2|운영자 B|행사 2 담당 · 정원 1명|
-
-로그인 화면의 계정 버튼으로 입력값을 채우고 로그인 버튼을 누릅니다. 각 탭은 별도 토큰을 사용하므로 일반 탭 여러 개로 역할을 나눌 수 있습니다.
-
-## 제공 코드와 구현할 부분
-
-로그인·JWT 인증, 스키마와 가상 계정, 조회 API와 권한 검사, 입력 형식 검사, 기본 화면, SQL 조회·저장 도구를 제공합니다.
-
-`src/application-service.js`의 TODO 4개는 초기 상태에서 501을 반환합니다.
-
-1. `apply`: 행사·학생·중복 검사, PENDING 저장과 APPLY 이력
-2. `cancel`: 학생 본인의 PENDING 취소, CANCELLED와 CANCEL 이력
-3. `approve`: 담당자·상태·정원 검사, APPROVED와 APPROVE 이력
-4. `revoke`: 담당자의 승인 취소, 다음 대기자 1명 승급, 두 이력의 원인 연결
-
-모든 상태 변경과 이력 저장을 트랜잭션으로 묶으세요. 특히 revoke에서는 신청 2건과 이력 2건의 부분 저장을 막아야 합니다. 대기자 선택, 업무 규칙, 이력 저장 시점, 트랜잭션 경계는 학생 구현입니다. repository 함수 자체는 권한을 검사하지 않습니다. 보조 함수·SQL·파일은 필요하면 추가할 수 있습니다.
-
-## 테스트
-
-```sh
-npm test
-npm run test:assignment
-npm run test:advanced
-```
-
-- `npm test`: 제공 기반 기능 4개. 구현 전과 후 모두 통과해야 합니다.
-- `test:assignment`: 필수 32개. TODO 구현 전 일부 실패가 정상입니다.
-- `test:advanced`: 선택 심화. 서버 2개가 마지막 자리를 동시에 승인하는 검사를 20회 수행합니다. 미수행은 감점하지 않습니다.
-
-테스트는 별도 임시 DB·포트를 사용합니다. 필수 테스트 T28~T30은 임시 DB 트리거로 이력 저장 실패를 주입합니다. `TEST_INJECTED_FAILURE` 로그는 이 검사의 의도된 오류입니다. HTTP 500뿐 아니라 상태·이력 전체가 요청 전과 같은지 검사합니다. 테스트가 오류를 흉내 내므로 실제 서비스 코드에 특별 처리를 넣지 마세요. 기대값 변경이나 테스트 삭제는 허용하지 않습니다.
-
-## 화면 검증
-
-- U01: alice 신청 → manager1 승인 → 학생이 최신 상태 확인.
-- U02: 운영자가 대기 목록 조회 → 학생이 대기 취소 → 오래된 운영자 화면의 승인 거부(409)와 CANCELLED 유지.
-- U03: 서버 종료·재실행 → 재로그인 → 신청 상태와 이력 유지.
-- U04: 새 DB에서 행사 2에 alice·bob·charlie 순서로 신청 → manager2가 alice 승인 → alice 승인 취소(사유 입력) → bob 자동 승인, charlie 대기 유지 → alice와 bob의 변경 이력에서 원인 ID 연결 확인.
-- U05: 새 DB에서 alice만 행사 2 신청·승인 → 승인 취소 → REVOKED, 승인 인원 0명, 응답 promoted=null 확인.
-
-승인 취소는 담당 운영자 화면의 승인된 신청에서 수행합니다. 각 신청의 ‘변경 이력 보기’로 저장 결과를 확인합니다. 다른 탭의 변경은 자동 반영되지 않으므로 ‘최신 정보 새로고침’을 사용하세요.
-
-## DB 초기화와 이전 코드에서의 전환
-
-서버를 먼저 종료하고 아래 명령에서 `RESET`을 입력합니다. 신청·변경 이력을 지우고 초기 계정·행사를 다시 만듭니다.
+`Ctrl+C`로 서버를 종료하고 저장소 최상위 폴더에서 아래 명령을 실행합니다. 확인 문구에 `RESET`을 입력하면 기존 신청과 변경 이력이 삭제되고 초기 연습 계정과 행사가 다시 생성됩니다. 초기화 후 `npm start`를 실행합니다.
 
 ```sh
 npm run db:reset
 ```
 
-이전 배포본 DB에는 REVOKED 상태와 변경 이력 스키마가 없습니다. 새 배포본에서는 기존 DB를 초기화하세요. 운영 데이터 마이그레이션은 이 과제 범위가 아닙니다.
+재시작 후 상태 유지를 검증할 때는 같은 DB를 사용하고 서버를 종료한 뒤 `npm start`로 다시 실행합니다.
 
-선택 환경변수: PORT, DB_PATH, JWT_SECRET. 기본 실행에는 설정 파일이 필요 없습니다. 키 파일을 지우면 기존 토큰은 무효화됩니다.
+## 구현 완료 항목과 변경 파일
 
-## 파일 구조
+| 파일 | 변경 내용 |
+| --- | --- |
+| [src/application-service.js](src/application-service.js) | `apply()`, `cancel()`, `approve()`, `revoke()`의 권한·중복·상태·정원 검사를 구현하였습니다. `withTransaction()`으로 상태 변경과 이력을 함께 저장하고, 오류가 발생하면 전체를 롤백합니다. |
+| [src/repository.js](src/repository.js) | `nextPending()`을 추가하였습니다. 같은 행사의 `PENDING` 신청을 `created_at`, `id` 오름차순으로 정렬하여 한 명을 선택합니다. |
+| [concurrency-extra.mjs](concurrency-extra.mjs) | 같은 신청의 직접 승인과 대기 취소, 첫 대기자의 직접 승인과 기존 승인 취소를 각각 20회 검사하는 스크립트입니다. |
 
-- `src/application-service.js`: 학생 구현 TODO 4개와 트랜잭션
-- `src/repository.js`: 조회·저장·이력 저장 도구
-- `src/db.js`: SQLite 스키마·초기 데이터
-- `src/auth.js`: JWT 인증
-- `src/app.js`: 라우팅·형식 검사·조회 권한·오류 응답
-- `src/server.js`: 로컬 서버
-- `public/`: 승인 취소·이력 조회 포함 제공 화면
-- `tests/`: 기반·필수·선택 심화 테스트
-- `docs/API.md`: 상태·이력·입출력 계약
+승인 취소는 `REVOKED` 상태와 `REVOKE` 이력을 저장한 뒤 대기자 한 명을 승급합니다. `AUTO_APPROVE` 이력에 원인 `REVOKE` 이력 ID를 연결하고, 대기자가 없으면 `promoted: null`을 반환합니다. 로그인·JWT 인증, 입력 검사, DB 스키마, 조회 API, 기본 화면과 제공 테스트를 사용하였습니다.
 
-## 제출 전 작성할 내용
+## 테스트와 증거
 
-이 부분을 본인의 서비스 소개, 변경 파일, 구현 완료 여부, 실행 환경, 알려진 문제, 보고서·검증 증거 링크와 AI 사용 요약으로 바꾸세요. GitHub URL·커밋 SHA를 LMS에 제출하고 보고서 PDF를 저장소 `docs/report.pdf`와 LMS에 같은 버전으로 첨부합니다.
+저장소 최상위 폴더에서 아래 명령을 실행합니다.
 
-`node_modules`, 생성 DB·서명 키, 실제 `.env`·JWT와 개인 정보는 제출하지 않습니다. 제공 코드와 직접 구현한 부분을 구분합니다.
+| 명령 | 확인 결과 |
+| --- | --- |
+| `npm test` | 기반 테스트 4건 통과 |
+| `npm run test:assignment` | 필수 테스트 T01~T32 32건 통과 |
+| `npm run test:advanced` | 서버 두 개에서 마지막 자리를 동시에 승인하는 검사를 20회 반복하여 통과 |
+| `node --test concurrency-extra.mjs` | 추가 동시성 조합 2건을 각각 20회 반복하여 통과 |
 
-## 참고 문서
+- 필수 테스트 터미널 캡처 [T01~T08](docs/evidence/T01~T08.png) · [T09~T16](docs/evidence/T09~T16.png) · [T17~T24](docs/evidence/T17~T24.png) · [T25~T32](docs/evidence/T25~T32.png)
+- T29에서는 `AUTO_APPROVE` 이력 저장 오류에 `500 INTERNAL_ERROR`가 반환되고 두 신청 상태와 기존 이력 3건이 유지되었습니다. 트리거를 제거한 뒤 재시도에서 `HTTP 200`, 승인 취소와 자동 승급, 이력 2건 추가를 확인하였습니다. [T29 전후 비교와 재시도](docs/evidence/T29%20자동승급이력%20저장%20실패.png)
 
-- [Node.js SQLite](https://nodejs.org/docs/latest-v24.x/api/sqlite.html)
-- [Express API](https://expressjs.com/en/5x/api/)
-- [jsonwebtoken](https://github.com/auth0/node-jsonwebtoken)
+| 화면 검증 | 결과와 증거 |
+| --- | --- |
+| U01 | 학생 신청, 담당 운영자 승인, 학생의 상태 재조회 확인. [U01](docs/evidence/U01) |
+| U02 | 대기 취소와 `CANCELLED` 이력을 확인하였습니다. 이전 운영자 화면의 승인 요청 `409 INVALID_STATE` 응답 캡처는 보류 상태입니다. [U02](docs/evidence/U02) |
+| U03 | 서버 종료와 재실행 후 신청 상태 및 변경 이력 유지 확인. [U03](docs/evidence/U03) |
+| U04 | 첫 대기자 승급, 승인 인원 유지, 두 신청의 원인 이력 연결 확인. [U04](docs/evidence/U04) |
+| U05 | 민지의 `REVOKED` 상태와 승인 인원 0명을 확인하였습니다. 취소 응답의 `"promoted": null` 화면 캡처는 보류 상태입니다. [U05](docs/evidence/U05) |
+
+동시성 검사에서는 두 서버가 같은 임시 SQLite DB를 사용합니다. 서비스는 `BEGIN IMMEDIATE`로 쓰기 트랜잭션을 시작하고 현재 상태와 정원 확인을 저장 작업과 함께 처리합니다. 검증 범위는 세 요청 조합을 각각 20회 반복한 경우입니다.
+
+## 보고서와 참고 자료
+
+- [구현 및 검증 보고서 PDF](docs/%EC%9B%B9%EC%84%9C%EB%B9%84%EC%8A%A4%EC%84%A4%EA%B3%84%20%EA%B3%BC%EC%A0%9C2%20%EB%B3%B4%EA%B3%A0%EC%84%9C%20-%20202219348%20%EA%B6%8C%EC%A4%80%EC%84%B1.pdf)
+- [과제 2 안내문](docs/01_과제2_안내문.pdf)
+- [API 계약](docs/API.md)
+- [전체 검증 증거](docs/evidence)
+
+코드 흐름 분석과 테스트 실행·결과 정리, 추가 동시성 검증 스크립트에 ChatGPT를 활용하였습니다.
+로컬에서 필수 테스트와 T29 롤백 및 재시도, 기본·추가 동시성 테스트를 직접 검증하였으며, 구체적인 적용 위치와 결과는 보고서의 AI 활용 항목에 기록하였습니다.
